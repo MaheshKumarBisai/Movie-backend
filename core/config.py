@@ -11,7 +11,7 @@ class Settings(BaseSettings):
 
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"
-    SEAT_LOCK_TTL: int = 10  # seconds (1 minute)
+    SEAT_LOCK_TTL: int = 600  # seconds (10 minutes)
 
     # Auth
     JWT_SECRET_KEY: str

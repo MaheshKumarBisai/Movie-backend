@@ -400,8 +400,8 @@ def create_theatre(
          raise HTTPException(status_code=403, detail="You are a user, can't be merchant")
 
     theatre = Theatre(
-        name=payload.name,
-        city=payload.city,
+        name=payload.name.strip(),
+        city=payload.city.strip().title(),
         owner_id=current_user.id,
         image_url=payload.image_url
     )
@@ -427,8 +427,8 @@ def update_theatre(
     if not theatre:
         raise HTTPException(status_code=404, detail="Theatre not found or access denied")
 
-    theatre.name = payload.name
-    theatre.city = payload.city
+    theatre.name = payload.name.strip()
+    theatre.city = payload.city.strip().title()
     if payload.image_url is not None:
         theatre.image_url = payload.image_url
 

@@ -20,20 +20,32 @@ async def send_otp_email(email: str, otp: int) -> bool:
     msg['To'] = email
     msg['Subject'] = f"{otp} is your ShowGo OTP"
 
-    body = f"""
-    <html>
-        <body style="font-family: Arial, sans-serif; padding: 20px; background-color: #0B0B15; color: #FFFFFF;">
-            <div style="max-width: 600px; margin: auto; background-color: #1F1F2E; padding: 30px; border-radius: 12px; border: 1px solid #8A2BE2;">
-                <h2 style="color: #A855F7; text-align: center;">ShowGo OTP</h2>
-                <p style="font-size: 16px; text-align: center;">Use the code below to sign in to your account.</p>
-                <div style="background-color: #0B0B15; padding: 20px; border-radius: 8px; text-align: center; margin: 30px 0;">
-                    <span style="font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #FFF;">{otp}</span>
-                </div>
-                <p style="font-size: 12px; color: #9CA3AF; text-align: center;">This code will expire in 5 minutes. Do not share it with anyone.</p>
-            </div>
-        </body>
-    </html>
-    """
+    body = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin: 0; padding: 32px 16px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #F8FAFC; color: #0F172A;">
+    <div style="max-width: 480px; margin: 0 auto; background-color: #FFFFFF; padding: 32px 28px; border-radius: 10px; border: 1px solid #E2E8F0; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);">
+        <h2 style="margin: 0 0 16px 0; font-size: 20px; font-weight: 700; color: #0F172A;">ShowGo Verification</h2>
+        <p style="font-size: 15px; line-height: 1.6; color: #334155; margin: 0 0 16px 0;">
+            Use the following one-time code to sign in to your account:
+        </p>
+        <p style="font-size: 16px; line-height: 1.6; color: #0F172A; margin: 0 0 20px 0;">
+            Your OTP is: <strong style="font-size: 22px; font-weight: 700; color: #0F172A; background-color: #F1F5F9; padding: 4px 10px; border-radius: 6px; letter-spacing: 3px; border: 1px solid #CBD5E1;">{otp}</strong>
+        </p>
+        <p style="font-size: 13px; line-height: 1.5; color: #64748B; margin: 0 0 20px 0;">
+            This code will expire in 5 minutes. Please do not share it with anyone.
+        </p>
+        <div style="border-top: 1px solid #E2E8F0; padding-top: 16px;">
+            <p style="font-size: 12px; color: #94A3B8; margin: 0;">
+                If you did not request this code, you can safely ignore this email.
+            </p>
+        </div>
+    </div>
+</body>
+</html>"""
     msg.attach(MIMEText(body, 'html'))
 
     try:
@@ -68,19 +80,29 @@ async def send_ticket_email(email: str, pdf_path: str, movie_title: str) -> bool
     msg['To'] = email
     msg['Subject'] = f"Your Ticket for {movie_title} - ShowGo"
 
-    body = f"""
-    <html>
-        <body style="font-family: Arial, sans-serif; padding: 20px; background-color: #0B0B15; color: #FFFFFF;">
-            <div style="max-width: 600px; margin: auto; background-color: #1F1F2E; padding: 30px; border-radius: 12px; border: 1px solid #8A2BE2;">
-                <h2 style="color: #A855F7; text-align: center;">Ticket Confirmed!</h2>
-                <p style="font-size: 16px; text-align: center;">Enjoy your movie! Your ticket for <b>{movie_title}</b> is attached to this email.</p>
-                <p style="font-size: 14px; color: #9CA3AF; text-align: center; margin-top: 20px;">
-                    Please present the attached PDF at the cinema hall entrance.
-                </p>
-            </div>
-        </body>
-    </html>
-    """
+    body = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin: 0; padding: 32px 16px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #F8FAFC; color: #0F172A;">
+    <div style="max-width: 480px; margin: 0 auto; background-color: #FFFFFF; padding: 32px 28px; border-radius: 10px; border: 1px solid #E2E8F0; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);">
+        <h2 style="margin: 0 0 16px 0; font-size: 20px; font-weight: 700; color: #0F172A;">Ticket Confirmed!</h2>
+        <p style="font-size: 15px; line-height: 1.6; color: #334155; margin: 0 0 16px 0;">
+            Enjoy your movie! Your ticket for <strong>{movie_title}</strong> is attached to this email.
+        </p>
+        <p style="font-size: 13px; line-height: 1.5; color: #64748B; margin: 0 0 20px 0;">
+            Please present the attached PDF at the cinema hall entrance.
+        </p>
+        <div style="border-top: 1px solid #E2E8F0; padding-top: 16px;">
+            <p style="font-size: 12px; color: #94A3B8; margin: 0;">
+                ShowGo Booking Service
+            </p>
+        </div>
+    </div>
+</body>
+</html>"""
     msg.attach(MIMEText(body, 'html'))
 
     # Attach PDF

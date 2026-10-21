@@ -1,162 +1,204 @@
-# ShowGo — Backend Deployment & Setup Guide
+# ShowGo — Backend Setup & Architecture Guide
 
-This document covers the setup, configuration, and deployment of the ShowGo FastAPI backend, including AWS (EC2 & RDS) and database initialization.
+FastAPI-powered backend service for the **ShowGo** movie ticketing platform. Provides REST APIs for authentication, movie listings, seat layout & temporary locking, booking transactions, and merchant management.
 
 ---
 
-## 🚀 Quick Start (Local Development)
+## 💻 Part 1: Local Development Setup (Windows PowerShell)
 
-### 1. Environment Configuration
-Create a `.env` file in the `backend/` directory:
+Follow these step-by-step instructions to run the backend locally using **Windows PowerShell**.
+
+### Prerequisites
+- **Python 3.10+** installed ([python.org](https://www.python.org/downloads/))
+- **PostgreSQL 14+** running locally (or access to an existing database instance)
+- **Git**
+
+---
+
+### Step 1: Open PowerShell & Navigate to Backend
+Open Windows PowerShell and navigate to the `backend` folder:
+```powershell
+cd C:\path\to\Movie-app\backend
+```
+
+---
+
+### Step 2: Create a Virtual Environment
+Create an isolated Python virtual environment:
+```powershell
+python -m venv venv
+```
+
+---
+
+### Step 3: Enable Script Execution & Activate Environment
+In Windows PowerShell, script execution is restricted by default. Enable execution for the current session and activate:
+```powershell
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
+.\venv\Scripts\Activate.ps1
+```
+> *(You will see `(venv)` prepended to your PowerShell prompt once activated).*
+
+---
+
+### Step 4: Upgrade Pip & Install Dependencies
+```powershell
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+---
+
+### Step 5: Configure Environment Variables (`.env`)
+Create a `.env` file in the `backend/` root directory:
+
+```powershell
+New-Item -ItemType File -Name .env -Force
+```
+
+Populate `.env` with your local configuration:
 ```env
-# Database (RDS Endpoint)
-DATABASE_URL="postgresql://postgres:PASSWORD@RDS_ENDPOINT:5432/moviedb"
+# Application
+APP_NAME="Movie Ticket Backend"
+DEBUG=True
 
-# Auth & Secrets
-JWT_SECRET_KEY="your-random-secret-key"
+# Database Connection (PostgreSQL)
+# Format: postgresql://<user>:<password>@<host>:<port>/<database_name>
+DATABASE_URL="postgresql://postgres:yourpassword@localhost:5432/moviedb"
+
+# Redis (Seat Locking Cache - Optional for basic dev)
+REDIS_URL="redis://localhost:6379/0"
+
+# JWT Authentication
+JWT_SECRET_KEY="your-secure-random-jwt-secret-key"
 JWT_EXPIRE_MINUTES=525600
+OTP_EXPIRE_SECONDS=300
+SEAT_LOCK_TTL=600
 
-# Email Delivery (SMTP)
+# AWS S3 (Media & Image Uploads)
+AWS_ACCESS_KEY_ID="your-aws-access-key-id"
+AWS_SECRET_ACCESS_KEY="your-aws-secret-access-key"
+AWS_S3_BUCKET="your-s3-bucket-name"
+AWS_REGION="us-east-2"
+
+# SMTP Settings (Email OTP & Ticket Delivery)
 SMTP_HOST="smtp.gmail.com"
 SMTP_PORT=587
 SMTP_USER="your-email@gmail.com"
-SMTP_PASS="your-app-password"
+SMTP_PASS="your-google-app-password"
 SMTP_FROM="noreply@showgo.com"
-
-# AWS (for S3 and SNS Notifications)
-AWS_ACCESS_KEY_ID="AKIA..."
-AWS_SECRET_ACCESS_KEY="TZc4..."
-AWS_S3_BUCKET="showgo-images"
-AWS_REGION="us-east-2"
-```
-
-### 2. Install Dependencies
-```bash
-pip install -r requirements.txt
-```
-
-### 3. Run the Server
-```bash
-uvicorn main:app --host 0.0.0.0 --reload
 ```
 
 ---
 
-## 🏗️ AWS Infrastructure Setup
+### Step 6: Initialize Database Schema & Seed Core Accounts
+Run the automated database setup script. This script automatically builds all database tables, performs column synchronizations, and seeds the initial default accounts:
+- **Merchant Account**: `merchant@test.com` (Password: `password123`)
+- **Admin Account**: `admin@test.com` (Password: `admin123`)
 
-### 1. EC2 Instance (Web Server)
-1. Launch an **Ubuntu 24.04 LTS** instance (`t2.micro` or `t2.small`).
-2. **Security Group Rules**:
-   - **SSH (22)**: Access for your IP Or Allow for all (Optional).
-   - **Custom TCP (8000)**: Port for the FastAPI backend.
-   - **PostgreSQL (5432)**: Ensure this is allowed if connecting locally (usually restricted to EC2 SG).
-
-### 2. RDS Instance (PostgreSQL)
-1. Create a **PostgreSQL 15+** database on AWS RDS.
-2. **Connectivity**: Choose the same VPC as your EC2.
-3. **Public Access**: No (Security Best Practice) Or Yes (For Testing).
-4. **RDS Security Group**: Add an inbound rule for **PostgreSQL (5432)** allowing the **EC2 Security Group** as the source.
-5. **Database Name**: `moviedb`.
-
----
-
-## 🚀 Deployment on EC2
-
-### 1. Connect and Install Environment
-```bash
-ssh -i key.pem ubuntu@YOUR_EC2_IP
-sudo apt update
-sudo apt install -y python3-pip python3-venv redis-server postgresql-client
-```
-
-### 2. Initialize the Database
-Before running the app, connect to your RDS endpoint and create the database:
-```bash
-psql -h YOUR_RDS_ENDPOINT -U postgres -p 5432
-# Type password
-CREATE DATABASE moviedb;
-\q
-```
-
-### 3. Setup App & Run
-```bash
-git clone YOUR_REPO_URL
-cd <To Repo Folder>
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-uvicorn main:app --host 0.0.0.0 --port 8000
+```powershell
+python -m scripts.setup_complete_db
 ```
 
 ---
 
-## ⚙️ Service Management (systemd)
-
-To run the backend as a background service on EC2, use `systemd`.
-
-### 1. Management Commands
-Manage the `movieapp.service` with these commands:
-- **Restart**: `sudo systemctl restart movieapp.service`
-- **Start**: `sudo systemctl start movieapp.service`
-- **Stop**: `sudo systemctl stop movieapp.service`
-- **Status**: `sudo systemctl status movieapp.service`
-- **View Logs**: `journalctl -u movieapp.service -f`
-
-### 2. Sample Service File
-Create a file at `/etc/systemd/system/movieapp.service`:
-```ini
-[Unit]
-Description=ShowGo FastAPI Backend
-After=network.target
-
-[Service]
-User=ubuntu
-Group=www-data
-WorkingDirectory=/home/ubuntu/Movie-app/backend
-Environment="PATH=/home/ubuntu/Movie-app/backend/venv/bin"
-ExecStart=/home/ubuntu/Movie-app/backend/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
-
-[Install]
-WantedBy=multi-user.target
+### Step 7: Start the FastAPI Server
+Launch the development server with auto-reload enabled:
+```powershell
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ---
 
-## 🏗️ Database Initialization & Seeding
+### Step 8: Verify API & Interactive Documentation
+Once started, test the backend in your browser:
+- **Interactive Swagger UI**: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
+- **ReDoc Documentation**: [http://127.0.0.1:8000/redoc](http://127.0.0.1:8000/redoc)
+- **Health Check**: [http://127.0.0.1:8000/](http://127.0.0.1:8000/)
 
-Run these scripts in order to set up your tables and initial data:
+---
 
-### 0. Reset Database (DANGEROUS)
-If you need to wipe all existing tables and data for a clean start:
-```bash
-python -m scripts.reset_db
-```
+### 🛠️ Local Maintenance Scripts
 
-### 0.1 Clear Sample Data (Safe)
-If you want to remove only the hardcoded movies and theatres but **keep your user accounts**:
-```bash
+Run these utility scripts from PowerShell as needed:
+
+#### 1. Clear Sample Data (Preserves User Accounts)
+Removes test movies, theatres, and bookings while keeping your user accounts intact:
+```powershell
 python -m scripts.clear_seeded_data
 ```
 
-### 1. Create Tables & Seed Core Users
-This script creates the schema and adds the initial Admin (`admin@test.com`) and Merchant (`merchant@test.com`) accounts.
-```bash
-python -m scripts.init_db
-```
-
-### 2. Populate App Data
-Run these to seed the movie catalog and theatre locations:
-```bash
-python -m scripts.populate_locations
-python -m scripts.populate_movies
-python -m scripts.populate_shows
-python -m scripts.populate_seats
+#### 2. Promote User to Merchant / Admin
+Promotes an existing registered email to merchant or administrator status:
+```powershell
+python -m scripts.promote_user user@example.com
 ```
 
 ---
 
-## 🛠️ Backend Features
-- **Email Authentication**: Secure OTP-based login via SMTP.
-- **Seat Locking**: Redis-backed temporary reservations (TTL: 10s).
-- **PDF Tickets**: Automatic ticket generation and email delivery.
-- **S3 Image Hosting**: Dynamic uploads for movie posters and user avatars.
+## ☁️ Part 2: AWS Cloud Architecture Outlook
+
+This section provides an architectural overview of how the ShowGo backend and data layers are hosted on Amazon Web Services (AWS) in production.
+
+### Infrastructure Topology
+
+```mermaid
+graph TB
+    subgraph Clients ["Client Layer"]
+        App["📱 Customer & Merchant Apps"]
+        Web["💻 Admin Web Portal"]
+    end
+
+    subgraph AWS ["Amazon Web Services (AWS) VPC"]
+        IGW["🌐 Internet Gateway"]
+        
+        subgraph PublicSubnet ["Public Subnet"]
+            EC2["🖥️ Amazon EC2 Instance\n(FastAPI Application Server)"]
+            SG_EC2["🔒 EC2 Security Group\n(Ports: 80, 443, 8000)"]
+        end
+
+        subgraph PrivateSubnet ["Private Subnet (Isolated)"]
+            RDS[("🗄️ Amazon RDS PostgreSQL\n(Production Database)")]
+            SG_RDS["🔒 RDS Security Group\n(Port 5432 from EC2 SG Only)"]
+        end
+    end
+
+    subgraph AWS_Services ["Managed AWS Services"]
+        S3[("🪣 Amazon S3 Bucket\n(Posters, Avatars & Tickets)")]
+        IAM["🔑 AWS IAM Role\n(EC2 Instance Profile)"]
+    end
+
+    Clients -->|HTTPS Requests| IGW
+    IGW --> EC2
+    EC2 -->|SQL Queries (Port 5432)| RDS
+    EC2 -.->|Assumes Role| IAM
+    IAM -.->|Authorizes Access| S3
+    EC2 -->|Direct Media Upload / Read| S3
+```
+
+---
+
+### Core AWS Components
+
+#### 1. Amazon EC2 (Public Subnet)
+- **Role**: Hosts and executes the FastAPI application server.
+- **Network Placement**: Resides in a **Public Subnet** with an assigned Public / Elastic IP connected to the AWS Internet Gateway.
+- **Security Group Rules**:
+  - `HTTP (80)` / `Custom TCP (8000)`: Inbound traffic for API communication from mobile clients.
+  - `HTTPS (443)`: Secure encrypted API traffic.
+  - `SSH (22)`: Administrative access restricted strictly to your trusted IP address.
+- *Deployment Roadmap*: Production execution on EC2 will be containerized.
+
+#### 2. Amazon RDS PostgreSQL (Private Subnet)
+- **Role**: Managed relational database storing users, theatres, movies, shows, and bookings.
+- **Network Placement**: Deployed in a dedicated **Private Subnet** with **Public Accessibility set to "No"**. It has no public IP address and cannot be accessed directly from the public internet.
+- **Security Group Rules**:
+  - `PostgreSQL (5432)`: Inbound traffic allowed **strictly from the EC2 Security Group**. No other inbound connections are permitted.
+
+#### 3. Amazon S3 (Simple Storage Service)
+- **Role**: Object storage for media assets including movie posters, theatre banner photos, merchant and user profile avatars, and generated ticket receipts.
+- **Access Control**: Configured with CORS rules to permit image rendering on mobile applications, with write permissions restricted via IAM.
+
+#### 4. AWS IAM Role (EC2 Instance Profile)
+- **Role**: Grants the EC2 instance authenticated access to Amazon S3.
+- **Security Advantage**: By attaching an IAM Role directly to the EC2 instance, the application automatically retrieves temporary credentials via the AWS Instance Metadata Service. This eliminates the need to hardcode `AWS_ACCESS_KEY_ID` or `AWS_SECRET_ACCESS_KEY` in the production `.env` file.

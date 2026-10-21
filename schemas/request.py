@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 
 class MovieIdRequest(BaseModel):
     movie_id: int
@@ -13,3 +13,8 @@ class BookingIdRequest(BaseModel):
 class ConfirmBookingRequest(BaseModel):
     booking_id: int
     seat_ids: List[int]
+
+class CancelBookingRequest(BaseModel):
+    booking_id: int
+    seat_ids: Optional[List[int]] = []
+

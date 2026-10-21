@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+import threading
 
-from core.database import get_db
+from core.database import get_db, SessionLocal
 from schemas.booking import BookingCreate, BookingResponse
 from models.booking import Booking
 from services.seat_lock import release_seats
@@ -11,7 +12,8 @@ from models.user import User
 router = APIRouter(prefix="/booking", tags=["Booking"])
 
 
-@router.post("/", response_model=BookingResponse)
+@router.post("", response_model=BookingResponse)
+@router.post("/", response_model=BookingResponse, include_in_schema=False)
 def create_booking(
     payload: BookingCreate,
     current_user: "User" = Depends(deps.get_current_user),
@@ -69,7 +71,7 @@ def create_booking(
     return booking
 
 
-from schemas.request import ConfirmBookingRequest
+from schemas.request import ConfirmBookingRequest, CancelBookingRequest
 
 @router.post("/confirm")
 def confirm_booking(
@@ -102,11 +104,10 @@ def confirm_booking(
     
     send_booking_confirmation(db, booking.user_id, booking.id, movie_title)
 
-    # Generate and Send PDF Ticket via Email
+    # Generate and Send PDF Ticket via Email (in background thread to not block response)
     try:
         if show:
             from services.ticket import generate_ticket_pdf
-            from services.email import send_ticket_email
             from models.theatre import Theatre
             from models.screen import Screen
             
@@ -130,8 +131,44 @@ def confirm_booking(
             
             user = db.query(User).filter(User.id == booking.user_id).first()
             if user and user.email:
-                import asyncio
-                asyncio.create_task(send_ticket_email(user.email, pdf_path, movie_title))
+                # Send email in background thread so it doesn't block the response
+                def _send_email_bg(email: str, path: str, title: str):
+                    try:
+                        import smtplib
+                        from email.mime.text import MIMEText
+                        from email.mime.multipart import MIMEMultipart
+                        from email.mime.application import MIMEApplication
+                        import os
+                        from core.config import settings
+                        
+                        if not settings.SMTP_USER or not settings.SMTP_PASS:
+                            return
+                        
+                        msg = MIMEMultipart()
+                        msg['From'] = settings.SMTP_FROM
+                        msg['To'] = email
+                        msg['Subject'] = f"Your Ticket for {title} - ShowGo"
+                        body = f"<html><body><p>Your ticket for <b>{title}</b> is attached.</p></body></html>"
+                        msg.attach(MIMEText(body, 'html'))
+                        
+                        with open(path, 'rb') as f:
+                            part = MIMEApplication(f.read(), Name=os.path.basename(path))
+                            part['Content-Disposition'] = f'attachment; filename="{os.path.basename(path)}"'
+                            msg.attach(part)
+                        
+                        if settings.SMTP_PORT == 465:
+                            server = smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT)
+                        else:
+                            server = smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10)
+                            server.starttls()
+                        server.login(settings.SMTP_USER, settings.SMTP_PASS)
+                        server.send_message(msg)
+                        server.quit()
+                        print(f"Ticket email sent to {email}")
+                    except Exception as ex:
+                        print(f"Background email failed: {ex}")
+                
+                threading.Thread(target=_send_email_bg, args=(user.email, pdf_path, movie_title), daemon=True).start()
             
     except Exception as e:
         print(f"Failed to generate/send ticket: {e}")
@@ -158,9 +195,10 @@ def confirm_booking(
 
 from datetime import datetime, timedelta
 
+
 @router.post("/cancel")
 def cancel_booking(
-    payload: ConfirmBookingRequest,  # Reuse: has booking_id and seat_ids
+    payload: CancelBookingRequest,
     current_user: "User" = Depends(deps.get_current_user),
     db: Session = Depends(get_db)
 ):

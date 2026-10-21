@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import List
 
 from core.database import get_db
@@ -16,7 +16,7 @@ def get_movie_reviews(
     db: Session = Depends(get_db)
 ):
     """Get all public reviews for a movie."""
-    reviews = db.query(Review).filter(Review.movie_id == movie_id).all()
+    reviews = db.query(Review).options(joinedload(Review.user)).filter(Review.movie_id == movie_id).all()
     
     # Map to schema manually to include user_name safely
     return [

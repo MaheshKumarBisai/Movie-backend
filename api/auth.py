@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from typing import Optional
 from core.database import get_db
 from models.user import User
+from api import deps
 from schemas.user import UserResponse, UserUpdateRequest
 from utils.jwt import create_access_token
 
@@ -193,9 +194,8 @@ def login_password(
         "user_role": user_role
     }
 
-from models.user import User
-from api import deps
 from schemas.auth import SetPasswordRequest
+
 
 @router.post("/set-password")
 def set_password(
@@ -212,13 +212,8 @@ def set_password(
     current_user.password_hash = get_password_hash(payload.password)
     db.commit()
     
-    current_user.password_hash = get_password_hash(payload.password)
-    db.commit()
-    
     return {"message": "Password updated successfully"}
 
-
-from schemas.user import UserResponse, UserUpdateRequest
 
 @router.get("/me", response_model=UserResponse)
 def get_current_user_profile(
@@ -228,7 +223,6 @@ def get_current_user_profile(
     Get current logged-in user details.
     """
     return current_user
-
 
 
 @router.put("/me", response_model=UserResponse)
@@ -244,30 +238,24 @@ def update_current_user_profile(
     if payload.avatar_url:
         print(f"AUTH UPDATE /me: Avatar Length={len(payload.avatar_url)}")
 
-    # Normalize empty strings to None
-    new_email = payload.email if payload.email and payload.email.strip() else None
-    new_mobile = payload.mobile if payload.mobile and payload.mobile.strip() else None
-
     if payload.name is not None:
         current_user.name = payload.name
     
-    if new_email is not None and new_email != current_user.email:
-        # Check if email is already taken by another user
-        existing_email_user = db.query(User).filter(User.email == new_email, User.id != current_user.id).first()
-        if existing_email_user:
-            raise HTTPException(status_code=400, detail="Email already in use by another account")
-        current_user.email = new_email
-    elif new_email is None:
-        current_user.email = None
+    if payload.email is not None and payload.email.strip():
+        new_email = payload.email.strip()
+        if new_email != current_user.email:
+            existing_email_user = db.query(User).filter(User.email == new_email, User.id != current_user.id).first()
+            if existing_email_user:
+                raise HTTPException(status_code=400, detail="Email already in use by another account")
+            current_user.email = new_email
 
-    if new_mobile is not None and new_mobile != current_user.mobile:
-        # Check if mobile is already taken by another user
-        existing_mobile_user = db.query(User).filter(User.mobile == new_mobile, User.id != current_user.id).first()
-        if existing_mobile_user:
-            raise HTTPException(status_code=400, detail="Mobile number already in use by another account")
-        current_user.mobile = new_mobile
-    elif new_mobile is None:
-        current_user.mobile = None
+    if payload.mobile is not None and payload.mobile.strip():
+        new_mobile = payload.mobile.strip()
+        if new_mobile != current_user.mobile:
+            existing_mobile_user = db.query(User).filter(User.mobile == new_mobile, User.id != current_user.id).first()
+            if existing_mobile_user:
+                raise HTTPException(status_code=400, detail="Mobile number already in use by another account")
+            current_user.mobile = new_mobile
 
     if payload.avatar_url is not None:
         print("AUTH UPDATE /me: Setting avatar_url")
@@ -276,4 +264,5 @@ def update_current_user_profile(
     db.commit()
     db.refresh(current_user)
     return current_user
+
 

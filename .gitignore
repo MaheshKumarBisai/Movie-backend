@@ -1,13 +1,47 @@
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
+
+# Virtual Environments
 .venv/
+venv/
+env/
+ENV/
+
+# Environment Variables & Secrets
 .env
+.env.*
+firebase-service-account.json
+*.pem
+*.key
+
+# SQLite / Local Databases
 *.db
+*.sqlite3
+
+# Uploads
 uploads/*
 !uploads/avatars/
+
+# Logs
+*.log
+
+# macOS
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+
+# Windows
+Thumbs.db
+ehthumbs.db
+
+# IDEs & Editors
 .idea/
 .vscode/
-*.log
-firebase-service-account.json
+*.swp
+*.swo
+*~
+

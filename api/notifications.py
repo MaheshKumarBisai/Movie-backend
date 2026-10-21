@@ -59,6 +59,22 @@ def mark_all_as_read(
     ).update({"is_read": True})
     db.commit()
     return {"message": "All notifications marked as read"}
+
+@router.put("/{notification_id}/read")
+def mark_notification_as_read(
+    notification_id: int,
+    current_user: User = Depends(deps.get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Mark a single notification as read."""
+    notif = db.query(Notification).filter(
+        Notification.id == notification_id,
+        Notification.user_id == current_user.id
+    ).first()
+    if notif:
+        notif.is_read = True
+        db.commit()
+    return {"message": "Notification marked as read"}
 @router.delete("/")
 def clear_all_notifications(
     current_user: User = Depends(deps.get_current_user),

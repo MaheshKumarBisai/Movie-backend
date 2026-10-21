@@ -1,10 +1,10 @@
 name: Deploy Backend
 
-on:
-  push:
-    branches: [main]
-    paths:
-      - "backend/**"
+# on:
+#   push:
+#     branches: [main]
+#     paths:
+#       - "backend/**"
 
 jobs:
   deploy:
@@ -19,7 +19,7 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            cd ~/Two_hearts/
+            cd /home/ubuntu/Two-heartes
             git pull origin main
             source venv/bin/activate
             pip install -r requirements.txt
