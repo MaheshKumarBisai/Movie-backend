@@ -202,3 +202,74 @@ graph TB
 #### 4. AWS IAM Role (EC2 Instance Profile)
 - **Role**: Grants the EC2 instance authenticated access to Amazon S3.
 - **Security Advantage**: By attaching an IAM Role directly to the EC2 instance, the application automatically retrieves temporary credentials via the AWS Instance Metadata Service. This eliminates the need to hardcode `AWS_ACCESS_KEY_ID` or `AWS_SECRET_ACCESS_KEY` in the production `.env` file.
+
+---
+
+## 🐳 Part 3: Docker Deployment & GitHub Actions CI/CD
+
+### Running with Docker
+
+#### Option A: Docker Compose (Recommended - includes Redis)
+```bash
+# Build and run containers in background
+docker compose up -d --build
+
+# View logs
+docker compose logs -f backend
+
+# Stop containers
+docker compose down
+```
+
+#### Option B: Standalone Docker
+```bash
+# Build Docker image
+docker build -t movie-backend .
+
+# Run container with your .env configuration
+docker run -d \
+  --name movie-backend \
+  --restart unless-stopped \
+  -p 8000:8000 \
+  --env-file .env \
+  movie-backend
+```
+
+---
+
+### 🚀 Automated Deployment Pipeline (`deploy-backend.yml`)
+
+The backend includes a GitHub Actions workflow (`.github/workflows/deploy-backend.yml`) that deploys the application directly to your EC2 instance via SSH and Docker whenever you push to `main` (or trigger it manually).
+
+**Security Advantage**: **No `.env` file is saved or stored on the EC2 disk.** Values are injected directly into the running Docker container in-memory.
+
+#### 1. GitHub Secrets (Sensitive — `Settings → Secrets and variables → Actions → Secrets`)
+
+| Secret Name | Description | Example / Notes |
+|---|---|---|
+| `SSH_PRIVATE_KEY` | Contents of your EC2 `.pem` key | `-----BEGIN RSA PRIVATE KEY-----...` |
+| `DATABASE_URL` | RDS PostgreSQL connection string | `postgresql://user:pass@rds-host:5432/moviedb` |
+| `JWT_SECRET_KEY` | Strong random secret for JWT | `your-secure-jwt-secret-key` |
+| `AWS_ACCESS_KEY_ID` | AWS IAM Access Key ID | `AKIA...` |
+| `AWS_SECRET_ACCESS_KEY` | AWS IAM Secret Access Key | `wJalrXUtnFEMI/K7MDENG/bPxRfiCY...` |
+| `SMTP_USER` | Gmail address for sending booking & OTP emails | `your-email@gmail.com` |
+| `SMTP_PASS` | Gmail 16-character App Password | `abcd efgh ijkl mnop` |
+
+#### 2. GitHub Variables (Non-sensitive — `Settings → Secrets and variables → Actions → Variables`)
+
+| Variable Name | Description | Recommended Value |
+|---|---|---|
+| `EC2_HOST` | Public IP or DNS of your EC2 instance | `3.142.171.143` |
+| `EC2_USER` | EC2 SSH username | `ubuntu` |
+| `AWS_S3_BUCKET` | S3 Bucket Name for media uploads | `movie-app-images-123` |
+| `AWS_REGION` | AWS Region of your S3 Bucket | `us-east-2` |
+| `REDIS_URL` | Redis URL | `redis://127.0.0.1:6379/0` |
+| `APP_NAME` | Name of application | `Movie Ticket Backend` |
+| `DEBUG` | FastAPI debug mode | `False` |
+| `SMTP_HOST` | SMTP server host | `smtp.gmail.com` |
+| `SMTP_PORT` | SMTP port | `587` |
+| `SMTP_FROM` | Sender display email | `noreply@showgo.com` |
+| `SEAT_LOCK_TTL` | Seat reservation lock time in seconds | `600` |
+| `OTP_EXPIRE_SECONDS` | OTP expiration time in seconds | `300` |
+
+

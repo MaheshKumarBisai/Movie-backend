@@ -1,27 +1,71 @@
-name: Deploy Backend
+name: Deploy Backend (Docker)
 
-# on:
-#   push:
-#     branches: [main]
-#     paths:
-#       - "backend/**"
+# Triggers: Push to main branch, or manual trigger from GitHub Actions tab
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
 
 jobs:
   deploy:
-    name: Deploy to EC2
+    name: Deploy to EC2 via Docker
     runs-on: ubuntu-latest
 
     steps:
-      - name: Deploy via SSH
+      - name: Deploy via SSH & Run Docker
         uses: appleboy/ssh-action@v1
         with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
+          host: ${{ secrets.EC2_HOST || vars.EC2_HOST }}
+          username: ${{ secrets.EC2_USER || vars.EC2_USER || 'ubuntu' }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            cd /home/ubuntu/Two-heartes
+            # 1. Navigate to repository directory on EC2
+            cd /home/ubuntu/Movie-backend 2>/dev/null || cd /home/ubuntu/Two-heartes 2>/dev/null || cd ~/Movie-backend 2>/dev/null || cd .
+
+            # 2. Pull latest code from GitHub
             git pull origin main
-            source venv/bin/activate
-            pip install -r requirements.txt
-            sudo systemctl restart movieapp
-            echo "Backend deployed and movieapp service restarted"
+
+            # 3. Ensure Redis container is running on EC2
+            if ! docker ps --format '{{.Names}}' | grep -q "^movie-redis$"; then
+              echo "Starting Redis container..."
+              docker run -d --name movie-redis --restart unless-stopped -p 6379:6379 redis:7-alpine 2>/dev/null || true
+            fi
+
+            # 4. Build Docker image
+            docker build -t movie-backend .
+
+            # 5. Stop and remove existing backend container if running
+            docker stop movie-backend 2>/dev/null || true
+            docker rm movie-backend 2>/dev/null || true
+
+            # 6. Run container with environment variables passed directly in-memory
+            # (NO .env file is written or saved on the EC2 disk)
+            docker run -d \
+              --name movie-backend \
+              --restart unless-stopped \
+              -p 8000:8000 \
+              --net host \
+              -e APP_NAME="${{ vars.APP_NAME || 'Movie Ticket Backend' }}" \
+              -e DEBUG="${{ vars.DEBUG || 'False' }}" \
+              -e DATABASE_URL="${{ secrets.DATABASE_URL }}" \
+              -e REDIS_URL="${{ vars.REDIS_URL || secrets.REDIS_URL || 'redis://127.0.0.1:6379/0' }}" \
+              -e JWT_SECRET_KEY="${{ secrets.JWT_SECRET_KEY }}" \
+              -e JWT_ALGORITHM="HS256" \
+              -e JWT_EXPIRE_MINUTES="${{ vars.JWT_EXPIRE_MINUTES || '525600' }}" \
+              -e OTP_EXPIRE_SECONDS="${{ vars.OTP_EXPIRE_SECONDS || '300' }}" \
+              -e SEAT_LOCK_TTL="${{ vars.SEAT_LOCK_TTL || '600' }}" \
+              -e AWS_ACCESS_KEY_ID="${{ secrets.AWS_ACCESS_KEY_ID }}" \
+              -e AWS_SECRET_ACCESS_KEY="${{ secrets.AWS_SECRET_ACCESS_KEY }}" \
+              -e AWS_S3_BUCKET="${{ vars.AWS_S3_BUCKET || secrets.AWS_S3_BUCKET }}" \
+              -e AWS_REGION="${{ vars.AWS_REGION || secrets.AWS_REGION || 'us-east-2' }}" \
+              -e SMTP_HOST="${{ vars.SMTP_HOST || 'smtp.gmail.com' }}" \
+              -e SMTP_PORT="${{ vars.SMTP_PORT || '587' }}" \
+              -e SMTP_USER="${{ secrets.SMTP_USER }}" \
+              -e SMTP_PASS="${{ secrets.SMTP_PASS }}" \
+              -e SMTP_FROM="${{ vars.SMTP_FROM || secrets.SMTP_FROM || 'noreply@showgo.com' }}" \
+              movie-backend
+
+            # 7. Clean up dangling images to save disk space on EC2
+            docker image prune -f
+
+            echo "ShowGo Backend successfully deployed with Docker!"
