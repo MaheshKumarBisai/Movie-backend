@@ -136,140 +136,182 @@ python -m scripts.promote_user user@example.com
 
 ---
 
-## ☁️ Part 2: AWS Cloud Architecture Outlook
+## ☁️ Part 2: AWS Cloud Architecture & Deployment Guide
 
-This section provides an architectural overview of how the ShowGo backend and data layers are hosted on Amazon Web Services (AWS) in production.
+This section covers the end-to-end production deployment of the **ShowGo Backend** on Amazon Web Services (AWS) using **Docker** and **GitHub Actions**.
 
-### Infrastructure Topology
+---
+
+### 🏛️ Infrastructure Architecture
 
 ```mermaid
-graph TB
+flowchart TB
     subgraph Clients ["Client Layer"]
-        App["📱 Customer & Merchant Apps"]
-        Web["💻 Admin Web Portal"]
+        UserApp["📱 Customer Mobile App - Expo"]
+        MerchantApp["🏪 Merchant Admin App - Expo"]
     end
 
-    subgraph AWS ["Amazon Web Services (AWS) VPC"]
+    subgraph AWS_VPC ["Amazon Web Services VPC"]
         IGW["🌐 Internet Gateway"]
-        
+
         subgraph PublicSubnet ["Public Subnet"]
-            EC2["🖥️ Amazon EC2 Instance\n(FastAPI Application Server)"]
-            SG_EC2["🔒 EC2 Security Group\n(Ports: 80, 443, 8000)"]
+            EC2["🖥️ Amazon EC2 Instance - Docker Backend and Redis"]
+            SG_EC2["🔒 EC2 Security Group - Inbound 22 and 8000"]
         end
 
-        subgraph PrivateSubnet ["Private Subnet (Isolated)"]
-            RDS[("🗄️ Amazon RDS PostgreSQL\n(Production Database)")]
-            SG_RDS["🔒 RDS Security Group\n(Port 5432 from EC2 SG Only)"]
+        subgraph PrivateSubnet ["Private Subnet - Isolated"]
+            RDS["🗄️ Amazon RDS PostgreSQL Database"]
+            SG_RDS["🔒 RDS Security Group - Port 5432 from EC2 SG"]
         end
     end
 
-    subgraph AWS_Services ["Managed AWS Services"]
-        S3[("🪣 Amazon S3 Bucket\n(Posters, Avatars & Tickets)")]
-        IAM["🔑 AWS IAM Role\n(EC2 Instance Profile)"]
+    subgraph AWS_Storage ["AWS Cloud Storage"]
+        S3["🪣 Amazon S3 Bucket - Posters, Avatars and Tickets"]
     end
 
-    Clients -->|HTTPS Requests| IGW
+    UserApp -->|REST API on Port 8000| IGW
+    MerchantApp -->|REST API on Port 8000| IGW
     IGW --> EC2
-    EC2 -->|SQL Queries (Port 5432)| RDS
-    EC2 -.->|Assumes Role| IAM
-    IAM -.->|Authorizes Access| S3
-    EC2 -->|Direct Media Upload / Read| S3
+    EC2 -->|SQL Queries on Port 5432| RDS
+    EC2 -->|Upload Media via HTTPS| S3
+    UserApp -.->|Fetch Images via HTTPS| S3
+    MerchantApp -.->|Fetch Images via HTTPS| S3
 ```
 
----
-
-### Core AWS Components
-
-#### 1. Amazon EC2 (Public Subnet)
-- **Role**: Hosts and executes the FastAPI application server.
-- **Network Placement**: Resides in a **Public Subnet** with an assigned Public / Elastic IP connected to the AWS Internet Gateway.
-- **Security Group Rules**:
-  - `HTTP (80)` / `Custom TCP (8000)`: Inbound traffic for API communication from mobile clients.
-  - `HTTPS (443)`: Secure encrypted API traffic.
-  - `SSH (22)`: Administrative access restricted strictly to your trusted IP address.
-- *Deployment Roadmap*: Production execution on EC2 will be containerized.
-
-#### 2. Amazon RDS PostgreSQL (Private Subnet)
-- **Role**: Managed relational database storing users, theatres, movies, shows, and bookings.
-- **Network Placement**: Deployed in a dedicated **Private Subnet** with **Public Accessibility set to "No"**. It has no public IP address and cannot be accessed directly from the public internet.
-- **Security Group Rules**:
-  - `PostgreSQL (5432)`: Inbound traffic allowed **strictly from the EC2 Security Group**. No other inbound connections are permitted.
-
-#### 3. Amazon S3 (Simple Storage Service)
-- **Role**: Object storage for media assets including movie posters, theatre banner photos, merchant and user profile avatars, and generated ticket receipts.
-- **Access Control**: Configured with CORS rules to permit image rendering on mobile applications, with write permissions restricted via IAM.
-
-#### 4. AWS IAM Role (EC2 Instance Profile)
-- **Role**: Grants the EC2 instance authenticated access to Amazon S3.
-- **Security Advantage**: By attaching an IAM Role directly to the EC2 instance, the application automatically retrieves temporary credentials via the AWS Instance Metadata Service. This eliminates the need to hardcode `AWS_ACCESS_KEY_ID` or `AWS_SECRET_ACCESS_KEY` in the production `.env` file.
 
 ---
 
-## 🐳 Part 3: Docker Deployment & GitHub Actions CI/CD
+### 📋 Step-by-Step AWS Setup (Order of Operations)
 
-### Running with Docker
+#### Step 1: Amazon RDS PostgreSQL (Private Subnet)
+1. **Create Database**:
+   - Engine: **PostgreSQL** (version 17 or 18 recommended).
+   - DB instance identifier: e.g. `movie-backend`.
+   - **Public Access**: Select **No** (places RDS securely in a private subnet).
+2. **Configure RDS Security Group**:
+   - In the RDS Security Group, add an **Inbound Rule**:
+     - **Type**: `PostgreSQL` (Port `5432`)
+     - **Source**: Select **Custom** → Enter your **EC2 Security Group ID** (`sg-xxxxxxxx`).
+   > *This guarantees that only your EC2 application server can communicate with the database. The database is completely shielded from public internet traffic.*
 
-#### Option A: Docker Compose (Recommended - includes Redis)
+---
+
+#### Step 2: Amazon S3 (Media & Image Uploads)
+1. **Create S3 Bucket**:
+   - Bucket name: e.g. `movie-app-images-123`
+   - Region: e.g. `us-east-2`
+2. **Permissions (Allow Mobile App to Read Images)**:
+   - Under **Block public access (bucket settings)**: Click **Edit** → **Uncheck** *"Block all public access"* → **Save**.
+   - Under **Bucket Policy**: Click **Edit** → Paste the public read policy:
+     ```json
+     {
+       "Version": "2012-10-17",
+       "Statement": [
+         {
+           "Sid": "PublicReadGetObject",
+           "Effect": "Allow",
+           "Principal": "*",
+           "Action": "s3:GetObject",
+           "Resource": "arn:aws:s3:::movie-app-images-123/*"
+         }
+       ]
+     }
+     ```
+
+---
+
+#### Step 3: Amazon EC2 (Application Host)
+1. **Launch EC2 Instance**:
+   - AMI: **Ubuntu 24.04 LTS** (or 22.04 LTS).
+   - Instance Type: `t3.micro` or `t3.small` (recommended for Docker).
+   - Network: Same VPC as RDS, placed in a **Public Subnet** with Auto-assign Public IP **Enabled**.
+2. **Configure EC2 Security Group**:
+   - **Inbound Rules**:
+     - `SSH (22)`: Your IP address (and GitHub Actions runner CIDRs if restricted).
+     - `Custom TCP (8000)`: `0.0.0.0/0` (allows mobile apps to reach FastAPI).
+   - **Outbound Rules**:
+     - `All traffic (0.0.0.0/0)`: Default rule (allows EC2 to connect to RDS and S3).
+3. **One-Time Server Setup on EC2**:
+   SSH into your EC2 instance and install Docker and Git:
+   ```bash
+   sudo apt update && sudo apt install -y docker.io docker-compose-v2 git
+   sudo usermod -aG docker ubuntu
+   newgrp docker
+   ```
+
+---
+
+#### Step 4: Database Initialization on RDS
+Once your backend container is deployed or running on EC2, initialize the schema, create all 18 tables, and populate initial admin/merchant seed data:
+
 ```bash
-# Build and run containers in background
-docker compose up -d --build
-
-# View logs
-docker compose logs -f backend
-
-# Stop containers
-docker compose down
-```
-
-#### Option B: Standalone Docker
-```bash
-# Build Docker image
-docker build -t movie-backend .
-
-# Run container with your .env configuration
-docker run -d \
-  --name movie-backend \
-  --restart unless-stopped \
-  -p 8000:8000 \
-  --env-file .env \
-  movie-backend
+# Execute the setup script directly inside the running container
+docker exec -it movie-backend python -m scripts.setup_complete_db
 ```
 
 ---
 
-### 🚀 Automated Deployment Pipeline (`deploy-backend.yml`)
+### 🚀 Step 5: Automated CI/CD Deployment (GitHub Actions)
 
-The backend includes a GitHub Actions workflow (`.github/workflows/deploy-backend.yml`) that deploys the application directly to your EC2 instance via SSH and Docker whenever you push to `main` (or trigger it manually).
+The deployment workflow is defined in [`.github/workflows/deploy-backend.yml`](.github/workflows/deploy-backend.yml).
 
-**Security Advantage**: **No `.env` file is saved or stored on the EC2 disk.** Values are injected directly into the running Docker container in-memory.
+#### Security Architecture:
+- **Zero `.env` file on EC2**: Environment variables are injected directly into the running Docker container in-memory via `-e` flags. No secret credentials are ever saved to the EC2 hard drive.
+- **Multi-Stage Docker Image**: Compiled inside a builder stage; final image contains only pre-built wheels and runs under a non-root `appuser`.
+- **Isolated Docker Network**: `movie-backend` and `movie-redis` communicate over an internal Docker bridge network (`movie-net`).
 
-#### 1. GitHub Secrets (Sensitive — `Settings → Secrets and variables → Actions → Secrets`)
+---
 
+#### Required GitHub Settings
+
+Go to your backend repository on GitHub → **Settings → Secrets and variables → Actions**:
+
+##### 🔒 Secrets Tab (`secrets.*` — Confidential)
 | Secret Name | Description | Example / Notes |
 |---|---|---|
 | `SSH_PRIVATE_KEY` | Contents of your EC2 `.pem` key | `-----BEGIN RSA PRIVATE KEY-----...` |
-| `DATABASE_URL` | RDS PostgreSQL connection string | `postgresql://user:pass@rds-host:5432/moviedb` |
-| `JWT_SECRET_KEY` | Strong random secret for JWT | `your-secure-jwt-secret-key` |
-| `AWS_ACCESS_KEY_ID` | AWS IAM Access Key ID | `AKIA...` |
-| `AWS_SECRET_ACCESS_KEY` | AWS IAM Secret Access Key | `wJalrXUtnFEMI/K7MDENG/bPxRfiCY...` |
+| `DATABASE_URL` | RDS PostgreSQL connection string | `postgresql://postgres:password@movie-backend.xxxx.us-east-2.rds.amazonaws.com:5432/postgres` |
+| `JWT_SECRET_KEY` | Strong random secret for signing JWTs | `your-secure-jwt-secret-key` |
+| `AWS_ACCESS_KEY_ID` | IAM User Access Key ID with S3 permissions | `AKIA...` |
+| `AWS_SECRET_ACCESS_KEY` | IAM User Secret Access Key | `wJalrXUtnFEMI/K7MDENG/bPxRfiCY...` |
 | `SMTP_USER` | Gmail address for sending booking & OTP emails | `your-email@gmail.com` |
 | `SMTP_PASS` | Gmail 16-character App Password | `abcd efgh ijkl mnop` |
 
-#### 2. GitHub Variables (Non-sensitive — `Settings → Secrets and variables → Actions → Variables`)
-
+##### 🌐 Variables Tab (`vars.*` — Configuration)
 | Variable Name | Description | Recommended Value |
 |---|---|---|
 | `EC2_HOST` | Public IP or DNS of your EC2 instance | `3.142.171.143` |
 | `EC2_USER` | EC2 SSH username | `ubuntu` |
 | `AWS_S3_BUCKET` | S3 Bucket Name for media uploads | `movie-app-images-123` |
 | `AWS_REGION` | AWS Region of your S3 Bucket | `us-east-2` |
-| `REDIS_URL` | Redis URL | `redis://127.0.0.1:6379/0` |
-| `APP_NAME` | Name of application | `Movie Ticket Backend` |
+| `REDIS_URL` | Internal Redis URL on Docker network | `redis://movie-redis:6379/0` |
+| `APP_NAME` | Application name | `Movie Ticket Backend` |
 | `DEBUG` | FastAPI debug mode | `False` |
 | `SMTP_HOST` | SMTP server host | `smtp.gmail.com` |
 | `SMTP_PORT` | SMTP port | `587` |
 | `SMTP_FROM` | Sender display email | `noreply@showgo.com` |
-| `SEAT_LOCK_TTL` | Seat reservation lock time in seconds | `600` |
-| `OTP_EXPIRE_SECONDS` | OTP expiration time in seconds | `300` |
+| `SEAT_LOCK_TTL` | Seat reservation lock duration (seconds) | `600` |
+| `OTP_EXPIRE_SECONDS` | OTP expiration duration (seconds) | `300` |
+
+---
+
+### 🛠️ Useful EC2 Operational Commands
+
+Once deployed on EC2, manage your backend using standard Docker commands:
+
+```bash
+# View running containers (movie-backend and movie-redis)
+docker ps
+
+# Stream live application logs
+docker logs -f movie-backend
+
+# Restart backend service
+docker restart movie-backend
+
+# Run complete database setup / table sync
+docker exec -it movie-backend python -m scripts.setup_complete_db
+```
+
 
 
