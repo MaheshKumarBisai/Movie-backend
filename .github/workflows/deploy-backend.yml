@@ -3,7 +3,7 @@ name: Deploy Backend (Docker)
 # Triggers: Push to main branch, or manual trigger from GitHub Actions tab
 on:
   push:
-    branches: [main]
+    branches: [f/deploy]
   workflow_dispatch:
 
 jobs:
