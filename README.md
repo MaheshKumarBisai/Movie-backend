@@ -144,41 +144,9 @@ This section covers the end-to-end production deployment of the **ShowGo Backend
 
 ### 🏛️ Infrastructure Architecture
 
-```mermaid
-flowchart TB
-    subgraph Clients ["Client Layer"]
-        UserApp["📱 Customer Mobile App - Expo"]
-        MerchantApp["🏪 Merchant Admin App - Expo"]
-    end
-
-    subgraph AWS_VPC ["Amazon Web Services VPC"]
-        IGW["🌐 Internet Gateway"]
-
-        subgraph PublicSubnet ["Public Subnet"]
-            EC2["🖥️ Amazon EC2 Instance - Docker Backend and Redis"]
-            SG_EC2["🔒 EC2 Security Group - Inbound 22 and 8000"]
-        end
-
-        subgraph PrivateSubnet ["Private Subnet - Isolated"]
-            RDS["🗄️ Amazon RDS PostgreSQL Database"]
-            SG_RDS["🔒 RDS Security Group - Port 5432 from EC2 SG"]
-        end
-    end
-
-    subgraph AWS_Storage ["AWS Cloud Storage"]
-        S3["🪣 Amazon S3 Bucket - Posters, Avatars and Tickets"]
-    end
-
-    UserApp -->|REST API on Port 8000| IGW
-    MerchantApp -->|REST API on Port 8000| IGW
-    IGW --> EC2
-    EC2 -->|SQL Queries on Port 5432| RDS
-    EC2 -->|Upload Media via HTTPS| S3
-    UserApp -.->|Fetch Images via HTTPS| S3
-    MerchantApp -.->|Fetch Images via HTTPS| S3
-```
-
-
+<p align="center">
+  <img src="docs/aws-architecture.png" alt="ShowGo AWS Cloud Architecture" width="100%">
+</p>
 ---
 
 ### 📋 Step-by-Step AWS Setup (Order of Operations)

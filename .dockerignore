@@ -1,6 +1,7 @@
-# Git
+# Git & Docs
 .git
 .github
+docs/
 
 # Virtual Environments
 .venv
