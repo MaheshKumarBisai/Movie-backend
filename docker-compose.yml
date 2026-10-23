@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  # In-memory store for OTP & seat locking
+  redis:
+    image: redis:7-alpine
+    container_name: movie-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  # FastAPI Backend API
+  backend:
+    build: .
+    container_name: movie-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_NAME
+      - DEBUG
+      - DATABASE_URL
+      - REDIS_URL
+      - JWT_SECRET_KEY
+      - JWT_ALGORITHM
+      - JWT_EXPIRE_MINUTES
+      - OTP_EXPIRE_SECONDS
+      - SEAT_LOCK_TTL
+      - AWS_ACCESS_KEY_ID
+      - AWS_SECRET_ACCESS_KEY
+      - AWS_S3_BUCKET
+      - AWS_REGION
+      - SMTP_HOST
+      - SMTP_PORT
+      - SMTP_USER
+      - SMTP_PASS
+      - SMTP_FROM
+    depends_on:
+      - redis
+
+volumes:
+  redis_data:
