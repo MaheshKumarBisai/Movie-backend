@@ -1,0 +1,44 @@
+# Git & Docs
+.git
+.github
+docs/
+
+# Virtual Environments
+.venv
+venv
+env
+ENV
+
+# Python cache & artifacts
+__pycache__
+*.py[cod]
+*$py.class
+*.egg-info
+dist
+build
+
+# Environment files & Secrets
+.env
+.env.*
+firebase-service-account.json
+*.pem
+*.key
+
+# Local databases & uploads
+*.db
+*.sqlite3
+uploads/*
+!uploads/avatars/
+
+# Logs & temp
+*.log
+*.swp
+*.swo
+*~
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
